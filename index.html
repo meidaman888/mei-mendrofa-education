@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Anatomi Paru-Paru Manusia - 3D Exploded View & Spirometri Interaktif</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020617;
+            color: #f8fafc;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background:
+                radial-gradient(circle at 50% 45%, rgba(14, 165, 233, 0.18) 0%, rgba(15, 23, 42, 0.65) 50%, #020617 90%),
+                linear-gradient(rgba(56, 189, 248, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.025) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            touch-action: none;
+        }
+        /* Custom Premium Slider */
+        input[type=range].explode-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type=range].explode-slider::-webkit-slider-runnable-track {
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #0ea5e9 0%, #6366f1 50%, #ec4899 100%);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+        }
+        input[type=range].explode-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.95);
+            margin-top: -7px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        input[type=range].explode-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 28px rgba(56, 189, 248, 1);
+        }
+        /* Floating 3D HTML Pins */
+        .organ-pin {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            transition: opacity 0.25s ease, transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+            z-index: 15;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+        }
+        .organ-pin:hover {
+            z-index: 35 !important;
+            transform: translate(-50%, -50%) scale(1.08);
+            border-color: rgba(56, 189, 248, 0.9);
+        }
+        .organ-pin.active-pin {
+            border-color: #38bdf8 !important;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.4), rgba(30, 58, 138, 0.65)) !important;
+            box-shadow: 0 0 28px rgba(56, 189, 248, 0.65);
+            z-index: 30;
+        }
+        /* Premium Glassmorphism */
+        .glass-panel {
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.88) 0%, rgba(9, 14, 28, 0.94) 100%);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.8);
+        }
+        @keyframes pulseRing {
+            0% { transform: scale(0.85); opacity: 0.9; }
+            70% { transform: scale(1.8); opacity: 0; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+        .pulse-dot::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            animation: pulseRing 2s infinite;
+        }
+    </style>
+</head>
+<body class="relative select-none">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- SVG Overlay for Callout Leader Lines -->
+    <svg id="svg-lines" class="pointer-events-none absolute inset-0 w-full h-full z-10"></svg>
+
+    <!-- HTML Floating Labels Container -->
+    <div id="labels-container" class="pointer-events-none absolute inset-0 w-full h-full z-10 overflow-hidden"></div>
+
+    <!-- TOP HEADER & CONTROLS -->
+    <header class="absolute top-0 left-0 right-0 z-30 p-3 md:p-5 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+        <!-- Brand Title -->
+        <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto shadow-2xl">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 via-indigo-500 to-pink-500 flex items-center justify-center shadow-lg shadow-sky-500/40">
+                <i data-lucide="activity" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm md:text-base font-bold tracking-tight text-white">Anatomi Paru-Paru Manusia</h1>
+                    <span class="hidden sm:inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30">3D Exploded View</span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden sm:block">Scroll mouse / Pinch layar / Geser slider untuk membedah sistem pernapasan</p>
+            </div>
+        </div>
+
+        <!-- Action Buttons Bar -->
+        <div class="flex items-center gap-2 pointer-events-auto flex-wrap">
+            <!-- Breathing Simulation Toggle -->
+            <button id="btn-breathe" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-medium text-emerald-300 border-emerald-500/30" title="Simulasi Siklus Inspirasi & Ekspirasi">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot relative"></span>
+                <span class="hidden md:inline">Napas:</span>
+                <span id="breathe-status" class="font-semibold">Normal (16/m)</span>
+            </button>
+
+            <!-- X-Ray Transparency Mode -->
+            <button id="btn-xray" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs font-medium text-cyan-300 border-cyan-500/30" title="Mode X-Ray Transparan (Lihat Bronkus di Dalam)">
+                <i data-lucide="scan-eye" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Mode X-Ray</span>
+            </button>
+
+            <!-- Airflow Particles -->
+            <button id="btn-airflow" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs font-medium text-indigo-300 border-indigo-500/30" title="Animasi Molekul Aliran O₂ & CO₂">
+                <i data-lucide="wind" class="w-4 h-4"></i>
+                <span class="hidden lg:inline">Partikel O₂</span>
+            </button>
+
+            <!-- Spirometry Capacity Modal Trigger -->
+            <button id="btn-spirometry" class="glass-panel hover:bg-purple-500/20 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs font-semibold text-purple-300 border-purple-500/30" title="Grafik Spirometri & Kapasitas Paru">
+                <i data-lucide="gauge" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Spirometri</span>
+            </button>
+
+            <!-- Microscopic Alveoli Modal -->
+            <button id="btn-alveoli-modal" class="glass-panel hover:bg-pink-500/20 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs font-semibold text-pink-300 border-pink-500/30" title="Struktur Mikroskopis Alveolus">
+                <i data-lucide="microscope" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Mikro Alveolus</span>
+            </button>
+
+            <!-- Quiz Modal -->
+            <button id="btn-quiz" class="glass-panel hover:bg-amber-500/20 active:scale-95 transition px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs font-semibold text-amber-300 border-amber-500/30">
+                <i data-lucide="help-circle" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Kuis</span>
+            </button>
+
+            <!-- Reset Camera & Assembly -->
+            <button id="btn-reset" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition p-2 rounded-xl text-slate-300 hover:text-white" title="Reset Posisi & Satukan Organ">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- CAMERA ANGLE QUICK BAR (TOP CENTER FLOATING PILL) -->
+    <div class="fixed top-[74px] left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-1 glass-panel px-2.5 py-1 rounded-full text-[11px] text-slate-300 pointer-events-auto shadow-xl">
+        <span class="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Sudut Pandang:</span>
+        <button data-cam="anterior" class="cam-preset px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 font-semibold hover:bg-sky-500/30 transition">Anterior (Depan)</button>
+        <button data-cam="right" class="cam-preset px-2.5 py-1 rounded-full hover:bg-slate-800 transition">Lateral Kanan</button>
+        <button data-cam="left" class="cam-preset px-2.5 py-1 rounded-full hover:bg-slate-800 transition">Lateral Kiri</button>
+        <button data-cam="posterior" class="cam-preset px-2.5 py-1 rounded-full hover:bg-slate-800 transition">Posterior (Belakang)</button>
+        <button data-cam="superior" class="cam-preset px-2.5 py-1 rounded-full hover:bg-slate-800 transition">Superior (Atas)</button>
+    </div>
+
+    <!-- LEFT ORGAN EXPLORER PANEL -->
+    <aside class="absolute left-3 md:left-5 top-20 bottom-28 z-20 w-64 hidden lg:flex flex-col glass-panel rounded-2xl p-3.5 shadow-2xl pointer-events-auto">
+        <div class="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-700/60">
+            <div class="flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-sky-400"></i>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Struktur Anatomi (11)</h2>
+            </div>
+            <span id="stage-badge" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-sky-400 border border-sky-500/30">Utuh</span>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative mb-2.5">
+            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+            <input id="organ-search" type="text" placeholder="Cari organ atau istilah Latin..." class="w-full bg-slate-900/90 border border-slate-700/70 focus:border-sky-400 rounded-xl pl-8 pr-2.5 py-1.5 text-[11px] text-white placeholder-slate-500 outline-none transition">
+        </div>
+
+        <div id="organ-list" class="flex-1 overflow-y-auto space-y-1 pr-1">
+            <!-- Populated dynamically via JS -->
+        </div>
+
+        <!-- Mini Status Footer -->
+        <div class="mt-2.5 pt-2.5 border-t border-slate-700/60 text-[11px] text-slate-400 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] uppercase tracking-wider font-semibold text-emerald-400 flex items-center gap-1">
+                    <i data-lucide="activity" class="w-3 h-3"></i> Siklus:
+                </span>
+                <span id="breath-phase-label" class="text-[10px] font-bold text-emerald-300">Inspirasi</span>
+            </div>
+            <div class="flex justify-between">
+                <span>Tingkat Exploded View:</span>
+                <span id="explode-percent-side" class="font-bold text-sky-400">0%</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div id="explode-bar-side" class="h-full bg-gradient-to-r from-sky-400 via-indigo-400 to-pink-500 w-0 transition-all duration-150"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- RIGHT DETAIL CARD PANEL -->
+    <aside id="detail-panel" class="absolute right-3 md:right-5 top-20 bottom-28 z-20 w-[calc(100vw-1.5rem)] sm:w-80 md:w-96 flex flex-col glass-panel rounded-2xl p-4 shadow-2xl pointer-events-auto transition-transform duration-300 translate-x-0">
+        <div class="flex items-start justify-between gap-2 pb-3 border-b border-slate-700/60">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span id="detail-category" class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30">Sistem Pernapasan</span>
+                    <span id="detail-latin" class="text-xs italic text-slate-400">Pulmo / Systema respiratorium</span>
+                </div>
+                <h2 id="detail-title" class="text-lg font-extrabold text-white mt-1">Anatomi Paru-Paru Utuh</h2>
+            </div>
+            <button id="btn-close-detail" class="sm:hidden p-1.5 rounded-lg bg-slate-800/80 text-slate-400 hover:text-white">
+                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto py-3 space-y-3.5 pr-1 text-xs leading-relaxed text-slate-300">
+            <!-- Instruction Tip -->
+            <div id="interaction-hint" class="p-3 rounded-xl bg-gradient-to-r from-sky-500/15 to-indigo-500/15 border border-sky-400/30 flex items-center gap-3">
+                <div class="p-2 rounded-lg bg-sky-500/20 text-sky-300 shrink-0">
+                    <i data-lucide="mouse" class="w-5 h-5"></i>
+                </div>
+                <div class="text-[11px] leading-snug">
+                    <strong class="text-white block">Gunakan Scroll / Pinch / Slider Bawah</strong>
+                    Zoom-out untuk membelah paru-paru menjadi 11 struktur anatomi secara bertahap.
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div>
+                <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Deskripsi Struktur</h3>
+                <p id="detail-desc" class="text-slate-200 leading-relaxed">
+                    Paru-paru manusia adalah sepasang organ berbentuk kerucut berspons di dalam rongga dada yang dilindungi selaput pleura. Paru kanan memiliki 3 lobus dan berukuran lebih besar, sedangkan paru kiri memiliki 2 lobus serta lekukan jantung (cardiac notch).
+                </p>
+            </div>
+
+            <!-- Physiological Function -->
+            <div class="p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                <h3 class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 mb-1 flex items-center gap-1.5">
+                    <i data-lucide="heart-pulse" class="w-3.5 h-3.5"></i> Fungsi Fisiologis Utama
+                </h3>
+                <p id="detail-function" class="text-slate-300">
+                    Menjalankan pertukaran gas (respirasi eksternal): menghirup oksigen (O₂) ke kapiler darah dan membuang karbon dioksida (CO₂) dari tubuh.
+                </p>
+            </div>
+
+            <!-- Key Specs Grid -->
+            <div>
+                <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Parameter Anatomis</h3>
+                <div id="detail-specs" class="grid grid-cols-2 gap-2">
+                    <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                        <span class="text-[10px] text-slate-400 block">Kapasitas Total</span>
+                        <span class="text-xs font-bold text-white">± 4.5 – 6.0 Liter</span>
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                        <span class="text-[10px] text-slate-400 block">Jumlah Alveolus</span>
+                        <span class="text-xs font-bold text-white">± 300 – 500 Juta</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clinical Correlation -->
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                <h3 class="text-[11px] font-bold uppercase tracking-wider text-amber-300 mb-1 flex items-center gap-1.5">
+                    <i data-lucide="stethoscope" class="w-3.5 h-3.5"></i> Korelasi Klinis
+                </h3>
+                <p id="detail-clinical" class="text-slate-300 text-[11px]">
+                    Pemeriksaan auskultasi suara napas dilakukan pada tiap proyeksi lobus. Gangguan umum meliputi Pneumonia, Asma, dan Efusi Pleura.
+                </p>
+            </div>
+        </div>
+
+        <!-- Bottom Detail Navigation -->
+        <div class="pt-2.5 border-t border-slate-700/60 flex items-center justify-between gap-2">
+            <button id="btn-prev-organ" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 transition">
+                <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Sebelumnya
+            </button>
+            <button id="btn-isolate-organ" class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-xs font-semibold text-sky-300 flex items-center gap-1.5 transition">
+                <i data-lucide="focus" class="w-3.5 h-3.5"></i> Fokus Organ
+            </button>
+            <button id="btn-next-organ" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 transition">
+                Berikutnya <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Floating Button to Re-open Detail Card on Mobile -->
+    <button id="btn-open-detail-mobile" class="hidden fixed right-4 bottom-28 z-20 glass-panel px-3.5 py-2 rounded-full text-xs font-bold text-sky-300 border border-sky-400/40 shadow-2xl items-center gap-1.5">
+        <i data-lucide="book-open" class="w-4 h-4"></i> Info Organ
+    </button>
+
+    <!-- BOTTOM EXPLODED VIEW CONTROLLER DOCK -->
+    <footer class="absolute bottom-3 md:bottom-5 left-3 right-3 md:left-1/2 md:-translate-x-1/2 md:w-[700px] z-30 glass-panel rounded-2xl px-4 py-3 shadow-2xl pointer-events-auto">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+            <div class="flex items-center gap-2">
+                <span class="font-bold text-white flex items-center gap-1.5">
+                    <i data-lucide="expand" class="w-4 h-4 text-sky-400"></i>
+                    Kontrol Exploded View (Pemisahan Lapisan Anatomi)
+                </span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="stage-description" class="text-[11px] font-medium text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-md border border-sky-500/30">Tahap 0: Anatomi Utuh</span>
+                <span id="explode-value-badge" class="text-xs font-extrabold text-white w-10 text-right">0%</span>
+            </div>
+        </div>
+
+        <!-- Slider & Presets -->
+        <div class="flex items-center gap-3">
+            <button id="btn-assemble" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 shrink-0 transition">
+                Utuh (0%)
+            </button>
+            <input id="explode-slider" type="range" min="0" max="100" step="0.5" value="0" class="explode-slider w-full" aria-label="Tingkat pemisahan organ">
+            <button id="btn-full-explode" class="px-2.5 py-1 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/40 text-[11px] font-semibold text-pink-300 shrink-0 transition">
+                Terpisah (100%)
+            </button>
+        </div>
+
+        <!-- Step Markers -->
+        <div class="grid grid-cols-4 text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-slate-800/80 text-center">
+            <button data-preset="0" class="preset-step hover:text-sky-300 transition font-medium text-sky-400">1. Pleura & Rongga (0%)</button>
+            <button data-preset="35" class="preset-step hover:text-sky-300 transition">2. 5 Lobus Paru (35%)</button>
+            <button data-preset="70" class="preset-step hover:text-sky-300 transition">3. Pohon Bronkial (70%)</button>
+            <button data-preset="100" class="preset-step hover:text-sky-300 transition">4. Vaskular & Alveoli (100%)</button>
+        </div>
+    </footer>
+
+    <!-- MICROSCOPIC ALVEOLUS MODAL -->
+    <div id="alveoli-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="glass-panel max-w-2xl w-full rounded-3xl p-5 md:p-6 border border-pink-500/30 shadow-2xl relative">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-700/70">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-2 rounded-xl bg-pink-500/20 text-pink-400">
+                        <i data-lucide="microscope" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Struktur Mikroskopis: Kantung Alveolus & Pertukaran Gas</h3>
+                        <p class="text-xs text-slate-400">Unit fungsional tempat difusi O₂ dan CO₂ menembus membran kapiler</p>
+                    </div>
+                </div>
+                <button id="btn-close-alveoli" class="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- SVG Diagram -->
+            <div class="my-4 bg-slate-900/90 rounded-2xl p-4 border border-slate-800 flex flex-col md:flex-row items-center gap-5">
+                <svg viewBox="0 0 320 240" class="w-full md:w-1/2 h-52 shrink-0">
+                    <defs>
+                        <radialGradient id="alvGrad" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stop-color="#fda4af" stop-opacity="0.3"/>
+                            <stop offset="100%" stop-color="#f43f5e" stop-opacity="0.7"/>
+                        </radialGradient>
+                        <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#3b82f6"/>
+                            <stop offset="50%" stop-color="#a855f7"/>
+                            <stop offset="100%" stop-color="#ef4444"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M135,10 L135,60 M185,10 L185,60" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/>
+                    <circle cx="115" cy="95" r="36" fill="url(#alvGrad)" stroke="#fb7185" stroke-width="2.5"/>
+                    <circle cx="205" cy="95" r="36" fill="url(#alvGrad)" stroke="#fb7185" stroke-width="2.5"/>
+                    <circle cx="160" cy="125" r="52" fill="url(#alvGrad)" stroke="#fda4af" stroke-width="3"/>
+                    <path d="M 20,175 Q 160,225 300,175" fill="none" stroke="url(#capGrad)" stroke-width="22" stroke-linecap="round"/>
+                    <path d="M 20,175 Q 160,225 300,175" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="4 6"/>
+                    <path d="M 145,120 L 145,175" stroke="#38bdf8" stroke-width="3"/>
+                    <circle cx="145" cy="110" r="11" fill="#0284c7"/>
+                    <text x="145" y="114" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">O₂</text>
+                    <path d="M 180,175 L 180,120" stroke="#a855f7" stroke-width="3"/>
+                    <circle cx="180" cy="108" r="11" fill="#7e22ce"/>
+                    <text x="180" y="112" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">CO₂</text>
+                    <text x="160" y="30" text-anchor="middle" fill="#fde68a" font-size="10" font-weight="bold">Bronkiolus Respiratorius</text>
+                    <text x="55" y="160" fill="#60a5fa" font-size="10" font-weight="bold">Darah Deoksi</text>
+                    <text x="235" y="160" fill="#f87171" font-size="10" font-weight="bold">Darah Oksi</text>
+                    <text x="160" y="228" text-anchor="middle" fill="#e2e8f0" font-size="10">Membran Alveolokapiler (0.2 µm)</text>
+                </svg>
+
+                <div class="space-y-2.5 text-xs text-slate-300">
+                    <div class="p-2.5 rounded-xl bg-slate-800/80 border-l-4 border-sky-400">
+                        <strong class="text-white block">1. Sel Pneumosit Tipe I & II</strong>
+                        Sel Tipe I membentuk dinding sangat tipis untuk difusi, sementara Tipe II menghasilkan surfaktan agar kantung udara tidak kolaps.
+                    </div>
+                    <div class="p-2.5 rounded-xl bg-slate-800/80 border-l-4 border-pink-400">
+                        <strong class="text-white block">2. Penghalang Sangat Tipis</strong>
+                        Ketebalan membran darah-udara hanya sekitar 0,2–0,5 mikrometer, membuat pertukaran gas terjadi sangat cepat.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SPIROMETRY CAPACITY MODAL -->
+    <div id="spirometry-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="glass-panel max-w-xl w-full rounded-3xl p-5 md:p-6 border border-purple-500/30 shadow-2xl relative">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-700/70">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-2 rounded-xl bg-purple-500/20 text-purple-400">
+                        <i data-lucide="gauge" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Spirometri & Volume Paru Manusia</h3>
+                        <p class="text-xs text-slate-400">Pengukuran kapasitas udara paru (Kapasitas Vital Total ± 4.8 L)</p>
+                    </div>
+                </div>
+                <button id="btn-close-spirometry" class="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="my-4 space-y-3 text-xs text-slate-300">
+                <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex justify-between items-center">
+                    <div>
+                        <strong class="text-white block">Volume Tidal (TV)</strong>
+                        <span class="text-slate-400">Udara inspirasi/ekspirasi normal saat istirahat</span>
+                    </div>
+                    <span class="text-sky-400 font-bold text-sm">± 500 mL</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex justify-between items-center">
+                    <div>
+                        <strong class="text-white block">Volume Cadangan Inspirasi (IRV)</strong>
+                        <span class="text-slate-400">Udara tambahan yang dapat dihirup maksimal</span>
+                    </div>
+                    <span class="text-emerald-400 font-bold text-sm">± 3,000 mL</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex justify-between items-center">
+                    <div>
+                        <strong class="text-white block">Volume Cadangan Ekspirasi (ERV)</strong>
+                        <span class="text-slate-400">Udara tambahan yang dapat dihembuskan maksimal</span>
+                    </div>
+                    <span class="text-amber-400 font-bold text-sm">± 1,100 mL</span>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex justify-between items-center">
+                    <div>
+                        <strong class="text-white block">Volume Residual (RV)</strong>
+                        <span class="text-slate-400">Sisa udara di paru agar tidak kolaps</span>
+                    </div>
+                    <span class="text-pink-400 font-bold text-sm">± 1,200 mL</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QUIZ BANNER -->
+    <div id="quiz-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-40 hidden glass-panel px-5 py-3.5 rounded-2xl border-2 border-amber-400/60 shadow-2xl max-w-md w-[92vw]">
+        <div class="flex items-center justify-between gap-3 mb-1">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                <i data-lucide="award" class="w-4 h-4"></i> Kuis Identifikasi Anatomi
+            </span>
+            <div class="flex items-center gap-2">
+                <span id="quiz-score" class="text-xs font-bold text-emerald-400">Skor: 0/5</span>
+                <button id="btn-close-quiz" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+        <p id="quiz-question" class="text-xs font-semibold text-white leading-snug">
+            Geser slider ke exploded view lalu klik pada struktur: ...
+        </p>
+        <p id="quiz-feedback" class="text-[11px] text-slate-300 mt-1 hidden"></p>
+    </div>
+
+    <!-- APPLICATION SCRIPT -->
+    <script>
+        // ============================================================================
+        // 1. DATABASE ANATOMI PARU-PARU MANUSIA (11 KOMPONEN)
+        // ============================================================================
+        const ORGAN_DATA = [
+            {
+                id: 'larynx',
+                name: 'Laring & Kartilago Tiroid',
+                latin: 'Larynx & Cartilago thyroidea',
+                category: 'Saluran Napas Atas',
+                stage: 1,
+                color: '#38bdf8',
+                explodeVec: { x: 0, y: 3.2, z: 0.6 },
+                labelOffset: { x: 0, y: 0.75, z: 0 },
+                desc: 'Laring (kotak suara) menghubungkan faring dengan trakea. Tersusun atas 9 tulang rawan termasuk kartilago tiroid (jakun) dan epiglotis yang menutup saat menelan.',
+                func: 'Menjaga patensi jalan napas, mencegah makanan masuk ke trakea, serta menghasilkan suara melalui getaran pita suara.',
+                specs: [
+                    { label: 'Panjang Rata-Rata', val: '± 44 mm' },
+                    { label: 'Struktur', val: '9 Kartilago Hialin' },
+                    { label: 'Lokasi Vertebra', val: 'C3 – C6' },
+                    { label: 'Katup Pelindung', val: 'Epiglotis' }
+                ],
+                clinical: 'Laringitis menyebabkan suara serak. Sumbatan akut pada laring merupakan kondisi gawat darurat.'
+            },
+            {
+                id: 'trachea',
+                name: 'Trakea & Karina',
+                latin: 'Trachea & Carina tracheae',
+                category: 'Saluran Konduksi Utama',
+                stage: 2,
+                color: '#60a5fa',
+                explodeVec: { x: 0, y: 1.95, z: 0.4 },
+                labelOffset: { x: 0.65, y: 0.3, z: 0 },
+                desc: 'Tabung silindris fleksibel sepanjang 10-12 cm yang diperkuat oleh 16-20 cincin tulang rawan huruf C. Bercabang dua di titik Karina setinggi vertebra T4/T5.',
+                func: 'Menghantarkan udara dari laring menuju bronkus serta menyaring dan melembapkan udara melalui eskalator mukosiliar.',
+                specs: [
+                    { label: 'Diameter Dalam', val: '± 2.0 – 2.5 cm' },
+                    { label: 'Cincin Tulang Rawan', val: '16 – 20 Cincin C' },
+                    { label: 'Titik Percabangan', val: 'Karina (T4-T5)' },
+                    { label: 'Lapisan', val: 'Epitel Silindris Bersilia' }
+                ],
+                clinical: 'Karina memiliki reseptor batuk paling sensitif. Benda asing yang terhirup lebih sering masuk ke bronkus kanan.'
+            },
+            {
+                id: 'bronchi',
+                name: 'Pohon Bronkus & Bronkiolus',
+                latin: 'Arbor bronchialis',
+                category: 'Percabangan Saluran Napas',
+                stage: 3,
+                color: '#93c5fd',
+                explodeVec: { x: 0, y: 0.4, z: 2.3 },
+                labelOffset: { x: 0, y: -0.4, z: 0.5 },
+                desc: 'Trakea bercabang menjadi Bronkus Utama Kanan dan Kiri, lalu terbagi menjadi bronkus lobaris, segmentalis, hingga ribuan bronkiolus.',
+                func: 'Mendistribusikan udara ke seluruh segmen bronkopulmonal dan mengatur resistensi aliran udara.',
+                specs: [
+                    { label: 'Generasi Cabang', val: '23 Generasi Dikotomis' },
+                    { label: 'Bronkus Kanan', val: '3 Cabang Lobaris' },
+                    { label: 'Bronkus Kiri', val: '2 Cabang Lobaris' },
+                    { label: 'Diameter Bronkiolus', val: '< 1 milimeter' }
+                ],
+                clinical: 'Pada asma, otot polos bronkiolus mengalami bronkospasme dan penyempitan saluran.'
+            },
+            {
+                id: 'rul',
+                name: 'Lobus Superior Paru Kanan',
+                latin: 'Lobus superior pulmonis dextri',
+                category: 'Parenkim Paru Kanan',
+                stage: 2,
+                color: '#fb7185',
+                explodeVec: { x: -2.5, y: 1.45, z: 0.3 },
+                labelOffset: { x: -0.75, y: 0.4, z: 0 },
+                desc: 'Bagian puncak hingga pertengahan atas paru kanan. Terdiri dari 3 segmen bronkopulmonal (apikal, posterior, anterior).',
+                func: 'Melakukan pertukaran gas di area toraks kanan atas dengan rasio ventilasi tinggi.',
+                specs: [
+                    { label: 'Jumlah Segmen', val: '3 Segmen (S1–S3)' },
+                    { label: 'Batas Bawah', val: 'Fisura Horizontalis' },
+                    { label: 'Puncak Organ', val: 'Apeks Pulmonis' },
+                    { label: 'Tekanan O₂', val: 'Tertinggi saat tegak' }
+                ],
+                clinical: 'Merupakan lokasi predileksi reaktivasi infeksi Mycobacterium tuberculosis (TBC).'
+            },
+            {
+                id: 'rml',
+                name: 'Lobus Medius Paru Kanan',
+                latin: 'Lobus medius pulmonis dextri',
+                category: 'Parenkim Paru Kanan',
+                stage: 2,
+                color: '#f43f5e',
+                explodeVec: { x: -3.0, y: -0.05, z: 1.25 },
+                labelOffset: { x: -0.75, y: 0, z: 0.4 },
+                desc: 'Lobus terkecil pada paru kanan berbentuk baji. Terletak di bagian anterior bawah di antara fisura horizontal dan oblik.',
+                func: 'Menyediakan permukaan pertukaran gas pada rongga dada kanan depan yang berbatasan dengan jantung.',
+                specs: [
+                    { label: 'Jumlah Segmen', val: '2 Segmen (Lateral & Medial)' },
+                    { label: 'Keunikan', val: 'Hanya ada di Paru Kanan' },
+                    { label: 'Auskultasi', val: 'Sela Iga ke-4 Anterior' },
+                    { label: 'Bentuk', val: 'Piramida / Baji' }
+                ],
+                clinical: 'Sering rentan terhadap sindrom kompresi karena letak bronkus yang sempit.'
+            },
+            {
+                id: 'ril',
+                name: 'Lobus Inferior Paru Kanan',
+                latin: 'Lobus inferior pulmonis dextri',
+                category: 'Parenkim Paru Kanan',
+                stage: 2,
+                color: '#e11d48',
+                explodeVec: { x: -2.4, y: -1.35, z: -0.95 },
+                labelOffset: { x: -0.75, y: -0.3, z: 0 },
+                desc: 'Lobus terbesar dari paru kanan yang menempati sisi posterior dan basal bawah. Permukaan bawahnya cekung mengikuti kubah diafragma dan hati.',
+                func: 'Menyumbang porsi kapasitas vital terbesar pada paru kanan.',
+                specs: [
+                    { label: 'Jumlah Segmen', val: '5 Segmen (S6–S10)' },
+                    { label: 'Permukaan Bawah', val: 'Facies Diaphragmatica' },
+                    { label: 'Auskultasi', val: 'Punggung Bawah Kanan' },
+                    { label: 'Volume', val: 'Lobus Terbesar' }
+                ],
+                clinical: 'Pneumonia aspirasi paling sering menginfeksi segmen basal kanan.'
+            },
+            {
+                id: 'lul',
+                name: 'Lobus Superior Paru Kiri & Lingula',
+                latin: 'Lobus superior pulmonis sinistri',
+                category: 'Parenkim Paru Kiri',
+                stage: 2,
+                color: '#fb7185',
+                explodeVec: { x: 2.6, y: 1.15, z: 0.6 },
+                labelOffset: { x: 0.75, y: 0.3, z: 0 },
+                desc: 'Mencakup bagian atas paru kiri. Memiliki Insisura Kardiaka untuk tempat jantung dan tonjolan Lingula di bagian bawah.',
+                func: 'Melakukan pertukaran gas sambil memberi ruang anatomis bagi ventrikel kiri jantung.',
+                specs: [
+                    { label: 'Jumlah Segmen', val: '4–5 Segmen' },
+                    { label: 'Lekukan Khas', val: 'Insisura Kardiaka' },
+                    { label: 'Bagian Bawah', val: 'Lingula Pulmonis' },
+                    { label: 'Batas Bawah', val: 'Fisura Oblik Kiri' }
+                ],
+                clinical: 'Insisura kardiaka mempermudah pemeriksaan fisik dan ekokardiografi jantung.'
+            },
+            {
+                id: 'lil',
+                name: 'Lobus Inferior Paru Kiri',
+                latin: 'Lobus inferior pulmonis sinistri',
+                category: 'Parenkim Paru Kiri',
+                stage: 2,
+                color: '#e11d48',
+                explodeVec: { x: 2.5, y: -1.35, z: -0.95 },
+                labelOffset: { x: 0.75, y: -0.3, z: 0 },
+                desc: 'Lobus besar di bagian belakang dan bawah paru kiri, bertumpu di atas kubah diafragma kiri yang berbatasan dengan lambung dan limpa.',
+                func: 'Menjalankan fungsi ventilasi dan difusi gas pada paru kiri bagian bawah.',
+                specs: [
+                    { label: 'Jumlah Segmen', val: '4–5 Segmen Basal' },
+                    { label: 'Bobot', val: '± 565 gram' },
+                    { label: 'Batas Atas', val: 'Fisura Oblik Sinistra' },
+                    { label: 'Organ di Bawah', val: 'Lambung & Limpa' }
+                ],
+                clinical: 'Atelektasis basal sering terjadi pasca-operasi jika pasien kurang bernapas dalam.'
+            },
+            {
+                id: 'vessels',
+                name: 'Arteri & Vena Pulmonalis',
+                latin: 'Vasa pulmonalia (Hilum)',
+                category: 'Sirkulasi Pulmonal',
+                stage: 3,
+                color: '#a855f7',
+                explodeVec: { x: 0, y: -0.3, z: -2.4 },
+                labelOffset: { x: 0, y: 0.2, z: -0.6 },
+                desc: 'Jaringan pembuluh darah hilum. Arteri Pulmonalis (biru) membawa darah deoksi dari jantung, Vena Pulmonalis (merah) membawa darah kaya O₂ ke atrium kiri.',
+                func: 'Menghubungkan sistem pernapasan dengan sirkulasi darah untuk mengoksigenasi ± 5 liter darah per menit.',
+                specs: [
+                    { label: 'Arteri Pulmonalis', val: 'Membawa Darah Deoksi' },
+                    { label: 'Vena Pulmonalis', val: '4 Vena Kaya Oksigen' },
+                    { label: 'Tekanan', val: '± 15 mmHg (Rendah)' },
+                    { label: 'Pintu Masuk', val: 'Hilum / Radiks Pulmonis' }
+                ],
+                clinical: 'Emboli paru terjadi saat bekuan darah menyumbat arteri pulmonalis (kondisi darurat).'
+            },
+            {
+                id: 'alveoli',
+                name: 'Gugus Kantung Alveolus',
+                latin: 'Sacculi alveolares & Alveoli',
+                category: 'Unit Pertukaran Gas',
+                stage: 3,
+                color: '#f472b6',
+                explodeVec: { x: 1.6, y: 0.2, z: 3.0 },
+                labelOffset: { x: 0.45, y: 0.4, z: 0 },
+                desc: 'Kumpulan kantung udara mikroskopis di ujung bronkiolus respiratorius, dikelilingi jalinan kapiler darah yang sangat rapat.',
+                func: 'Tempat difusi O₂ dan CO₂ secara pasif menembus membran alveolokapiler berdasarkan perbedaan tekanan gas.',
+                specs: [
+                    { label: 'Jumlah Total', val: '300 – 500 Juta Alveoli' },
+                    { label: 'Luas Permukaan', val: '± 70 – 100 m²' },
+                    { label: 'Diameter', val: '± 200 mikrometer' },
+                    { label: 'Zat Pelindung', val: 'Surfaktan Lipoprotein' }
+                ],
+                clinical: 'Pada emfisema, sekat antar-alveolus rusak sehingga luas permukaan difusi berkurang.'
+            },
+            {
+                id: 'diaphragm',
+                name: 'Otot Diafragma & Selaput Pleura',
+                latin: 'Diaphragma & Cavitas pleuralis',
+                category: 'Mekanika Pernapasan',
+                stage: 1,
+                color: '#f97316',
+                explodeVec: { x: 0, y: -2.9, z: 0 },
+                labelOffset: { x: 0, y: -0.5, z: 0.7 },
+                desc: 'Diafragma adalah otot lurik berbentuk kubah yang memisahkan rongga dada dan perut. Paru dibungkus membran pleura viseralis dan parietalis.',
+                func: 'Motor penggerak utama inspirasi. Saat berkontraksi, diafragma mendatar memperbesar volume dada dan menciptakan tekanan negatif.',
+                specs: [
+                    { label: 'Persarafan', val: 'Nervus Phrenicus (C3–C5)' },
+                    { label: 'Kontribusi', val: '± 75% Usaha Napas' },
+                    { label: 'Tekanan Intrapleura', val: '-4 s/d -8 cmH₂O' },
+                    { label: 'Cairan Pelumas', val: '± 10–20 mL' }
+                ],
+                clinical: 'Jika udara masuk ke rongga pleura (Pneumotoraks), paru-paru akan kolaps.'
+            }
+        ];
+
+        // ============================================================================
+        // 2. INISIALISASI SCENE 3D THREE.JS
+        // ============================================================================
+        const container = document.getElementById('canvas-container');
+        const svgLines = document.getElementById('svg-lines');
+        const labelsContainer = document.getElementById('labels-container');
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0.4, 10.0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.7);
+        scene.add(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+        keyLight.position.set(6, 11, 9);
+        keyLight.castShadow = true;
+        scene.add(keyLight);
+
+        const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.6);
+        fillLight.position.set(-9, 3, 5);
+        scene.add(fillLight);
+
+        const rimLight = new THREE.PointLight(0xf43f5e, 0.8, 30);
+        rimLight.position.set(0, -5, -7);
+        scene.add(rimLight);
+
+        const rootGroup = new THREE.Group();
+        scene.add(rootGroup);
+
+        const breathingGroup = new THREE.Group();
+        rootGroup.add(breathingGroup);
+
+        const organGroups = {};
+        const pickableMeshes = [];
+        const labelElements = {};
+
+        // Airflow Particles
+        const airflowGroup = new THREE.Group();
+        breathingGroup.add(airflowGroup);
+        const airflowParticles = [];
+        let showAirflow = true;
+        let xrayMode = false;
+
+        function createAirflowParticles() {
+            const pGeo = new THREE.SphereGeometry(0.032, 8, 8);
+            const o2Mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.9 });
+            const co2Mat = new THREE.MeshBasicMaterial({ color: 0xc084fc, transparent: true, opacity: 0.9 });
+
+            const paths = [
+                [new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(-0.62, 0.34, 0), new THREE.Vector3(-1.1, 0.9, 0.1)],
+                [new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(-0.62, 0.34, 0), new THREE.Vector3(-1.15, 0.0, 0.35)],
+                [new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(-0.62, 0.34, 0), new THREE.Vector3(-1.15, -0.65, -0.15)],
+                [new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(0.72, 0.28, 0), new THREE.Vector3(1.1, 0.65, 0.2)],
+                [new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 0.7, 0), new THREE.Vector3(0.72, 0.28, 0), new THREE.Vector3(1.12, -0.65, -0.15)]
+            ];
+
+            paths.forEach((pts) => {
+                const curve = new THREE.CatmullRomCurve3(pts);
+                for (let i = 0; i < 9; i++) {
+                    const isO2 = i % 2 === 0;
+                    const mesh = new THREE.Mesh(pGeo, isO2 ? o2Mat : co2Mat);
+                    airflowGroup.add(mesh);
+                    airflowParticles.push({
+                        mesh,
+                        curve,
+                        t: i / 9,
+                        speed: 0.005 + Math.random() * 0.002,
+                        isO2
+                    });
+                }
+            });
+        }
+        createAirflowParticles();
+
+        // ============================================================================
+        // 3. TEXTURE & GEOMETRY BUILDERS
+        // ============================================================================
+        function createLobuleTexture(baseHex, veinHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 256, 256);
+
+            ctx.strokeStyle = veinHex;
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.28;
+            for (let i = 0; i < 48; i++) {
+                const cx = Math.random() * 256;
+                const cy = Math.random() * 256;
+                const r = 12 + Math.random() * 18;
+                ctx.beginPath();
+                for (let s = 0; s < 6; s++) {
+                    const ang = (s / 6) * Math.PI * 2;
+                    const px = cx + Math.cos(ang) * r;
+                    const py = cy + Math.sin(ang) * r;
+                    if (s === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(2, 2);
+            return tex;
+        }
+
+        const lungSurfaceTex = createLobuleTexture('#e15b64', '#881337');
+
+        function buildDeformedLobeGeometry(deformFn) {
+            const geom = new THREE.SphereGeometry(1, 48, 48);
+            const pos = geom.attributes.position;
+            const v = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v.fromBufferAttribute(pos, i);
+                deformFn(v);
+                const ripple = 1 + 0.02 * (Math.sin(v.x * 10) * Math.cos(v.y * 10) * Math.sin(v.z * 10));
+                v.multiplyScalar(ripple);
+                pos.setXYZ(i, v.x, v.y, v.z);
+            }
+            geom.computeVertexNormals();
+            return geom;
+        }
+
+        function registerOrganGroup(id) {
+            const data = ORGAN_DATA.find(o => o.id === id);
+            const grp = new THREE.Group();
+            grp.name = id;
+            grp.userData = {
+                id: id,
+                basePos: new THREE.Vector3(0, 0, 0),
+                explodeVec: new THREE.Vector3(data.explodeVec.x, data.explodeVec.y, data.explodeVec.z),
+                stage: data.stage,
+                anchorLocal: new THREE.Vector3(0, 0, 0)
+            };
+            breathingGroup.add(grp);
+            organGroups[id] = grp;
+            return grp;
+        }
+
+        function tagChildrenForPicking(group, organId) {
+            group.traverse(child => {
+                if (child.isMesh) {
+                    child.userData.organId = organId;
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    pickableMeshes.push(child);
+                }
+            });
+        }
+
+        // ============================================================================
+        // 4. PEMBANGUNAN MODEL 3D (11 KOMPONEN)
+        // ============================================================================
+        function buildAnatomicalModel() {
+            // 1. LARING & KARTILAGO
+            const larynxGrp = registerOrganGroup('larynx');
+            const cartilageMat = new THREE.MeshPhysicalMaterial({ color: 0x7dd3fc, roughness: 0.3, metalness: 0.05, clearcoat: 0.5 });
+            const epiglMat = new THREE.MeshPhysicalMaterial({ color: 0xfda4af, roughness: 0.4 });
+
+            const thyroidGeo = new THREE.CylinderGeometry(0.28, 0.23, 0.48, 24, 1, false, 0, Math.PI * 1.65);
+            const thyroidMesh = new THREE.Mesh(thyroidGeo, cartilageMat);
+            thyroidMesh.rotation.y = -Math.PI * 0.82;
+            thyroidMesh.position.set(0, 2.42, 0.02);
+            larynxGrp.add(thyroidMesh);
+
+            const notchGeo = new THREE.ConeGeometry(0.14, 0.25, 16);
+            const notchMesh = new THREE.Mesh(notchGeo, cartilageMat);
+            notchMesh.rotation.x = Math.PI / 2;
+            notchMesh.position.set(0, 2.52, 0.22);
+            larynxGrp.add(notchMesh);
+
+            const hyoidGeo = new THREE.TorusGeometry(0.27, 0.045, 12, 28, Math.PI * 1.2);
+            const hyoidMesh = new THREE.Mesh(hyoidGeo, new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.3 }));
+            hyoidMesh.rotation.x = Math.PI / 2;
+            hyoidMesh.rotation.z = -Math.PI * 0.6;
+            hyoidMesh.position.set(0, 2.76, 0.05);
+            larynxGrp.add(hyoidMesh);
+
+            const epiGeo = new THREE.SphereGeometry(0.18, 16, 16);
+            epiGeo.scale(0.8, 1.4, 0.25);
+            const epiMesh = new THREE.Mesh(epiGeo, epiglMat);
+            epiMesh.position.set(0, 2.72, -0.05);
+            epiMesh.rotation.x = -0.35;
+            larynxGrp.add(epiMesh);
+
+            const cricoidGeo = new THREE.TorusGeometry(0.21, 0.05, 12, 24);
+            const cricoidMesh = new THREE.Mesh(cricoidGeo, cartilageMat);
+            cricoidMesh.rotation.x = Math.PI / 2;
+            cricoidMesh.position.set(0, 2.12, 0);
+            larynxGrp.add(cricoidMesh);
+
+            larynxGrp.userData.anchorLocal.set(0, 2.5, 0.15);
+            tagChildrenForPicking(larynxGrp, 'larynx');
+
+            // 2. TRAKEA & KARINA
+            const tracheaGrp = registerOrganGroup('trachea');
+            const mucosaMat = new THREE.MeshPhysicalMaterial({ color: 0xe07a84, roughness: 0.45, clearcoat: 0.3 });
+            const ringMat = new THREE.MeshPhysicalMaterial({ color: 0xbae6fd, roughness: 0.3, clearcoat: 0.5 });
+
+            const tubeGeo = new THREE.CylinderGeometry(0.19, 0.19, 1.38, 24);
+            const tubeMesh = new THREE.Mesh(tubeGeo, mucosaMat);
+            tubeMesh.position.set(0, 1.38, 0);
+            tracheaGrp.add(tubeMesh);
+
+            for (let i = 0; i < 14; i++) {
+                const ringGeo = new THREE.TorusGeometry(0.205, 0.024, 10, 24, Math.PI * 1.65);
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = Math.PI / 2;
+                ring.rotation.z = -Math.PI * 0.32;
+                ring.position.set(0, 2.0 - i * 0.096, 0);
+                tracheaGrp.add(ring);
+            }
+
+            const carinaGeo = new THREE.SphereGeometry(0.23, 20, 20);
+            carinaGeo.scale(1.2, 0.8, 0.9);
+            const carinaMesh = new THREE.Mesh(carinaGeo, mucosaMat);
+            carinaMesh.position.set(0, 0.72, 0);
+            tracheaGrp.add(carinaMesh);
+
+            tracheaGrp.userData.anchorLocal.set(0, 1.4, 0.2);
+            tagChildrenForPicking(tracheaGrp, 'trachea');
+
+            // 3. POHON BRONKUS
+            const bronchiGrp = registerOrganGroup('bronchi');
+            const bronchusMat = new THREE.MeshPhysicalMaterial({ color: 0x93c5fd, roughness: 0.35, clearcoat: 0.4 });
+
+            function addBranchSegment(p1, p2, r1, r2) {
+                const dir = new THREE.Vector3().subVectors(p2, p1);
+                const len = dir.length();
+                const cyl = new THREE.CylinderGeometry(r1, r2, len, 14);
+                cyl.translate(0, len / 2, 0);
+                cyl.rotateX(Math.PI / 2);
+                const mesh = new THREE.Mesh(cyl, bronchusMat);
+                mesh.position.copy(p1);
+                mesh.lookAt(p2);
+                bronchiGrp.add(mesh);
+
+                const joint = new THREE.Mesh(new THREE.SphereGeometry(r2 * 1.05, 10, 10), bronchusMat);
+                joint.position.copy(p2);
+                bronchiGrp.add(joint);
+            }
+
+            function growBronchialTree(startPt, dirVec, length, radius, depth) {
+                if (depth <= 0) return;
+                const endPt = new THREE.Vector3().copy(startPt).addScaledVector(dirVec.clone().normalize(), length);
+                addBranchSegment(startPt, endPt, radius, radius * 0.72);
+
+                const spread = 0.48;
+                const b1 = dirVec.clone().add(new THREE.Vector3((Math.random() - 0.3) * spread, 0.42, (Math.random() - 0.5) * spread));
+                const b2 = dirVec.clone().add(new THREE.Vector3((Math.random() - 0.3) * spread, -0.42, (Math.random() - 0.5) * spread));
+
+                growBronchialTree(endPt, b1, length * 0.74, radius * 0.72, depth - 1);
+                growBronchialTree(endPt, b2, length * 0.74, radius * 0.72, depth - 1);
+            }
+
+            const carinaPt = new THREE.Vector3(0, 0.72, 0);
+            const rHilum = new THREE.Vector3(-0.62, 0.34, 0);
+            addBranchSegment(carinaPt, rHilum, 0.16, 0.13);
+            growBronchialTree(rHilum, new THREE.Vector3(-0.7, 0.65, 0.1), 0.46, 0.11, 3);
+            growBronchialTree(rHilum, new THREE.Vector3(-0.9, -0.05, 0.35), 0.44, 0.10, 3);
+            growBronchialTree(rHilum, new THREE.Vector3(-0.7, -0.75, -0.2), 0.52, 0.11, 3);
+
+            const lHilum = new THREE.Vector3(0.72, 0.28, 0);
+            addBranchSegment(carinaPt, lHilum, 0.14, 0.11);
+            growBronchialTree(lHilum, new THREE.Vector3(0.75, 0.6, 0.15), 0.48, 0.10, 3);
+            growBronchialTree(lHilum, new THREE.Vector3(0.75, -0.7, -0.15), 0.52, 0.11, 3);
+
+            bronchiGrp.userData.anchorLocal.set(0, 0.35, 0.15);
+            tagChildrenForPicking(bronchiGrp, 'bronchi');
+
+            // Parenchyma Material Maker
+            function createParenchymaMat(tintHex) {
+                return new THREE.MeshPhysicalMaterial({
+                    color: new THREE.Color(tintHex),
+                    map: lungSurfaceTex,
+                    roughness: 0.5,
+                    metalness: 0.03,
+                    clearcoat: 0.4,
+                    clearcoatRoughness: 0.22,
+                    transparent: true,
+                    opacity: 0.95
+                });
+            }
+
+            // 4. RUL (Lobus Superior Kanan)
+            const rulGrp = registerOrganGroup('rul');
+            const rulGeo = buildDeformedLobeGeometry(v => {
+                v.x *= 0.86; v.y *= 0.92; v.z *= 0.88;
+                if (v.y > 0) { const taper = Math.max(0.28, 1 - v.y * 0.52); v.x *= taper; v.z *= taper; }
+                if (v.x > 0.15) v.x = 0.15 + (v.x - 0.15) * 0.25;
+                if (v.y < -0.2) v.y = -0.2 + (v.y + 0.2) * 0.35;
+            });
+            const rulMesh = new THREE.Mesh(rulGeo, createParenchymaMat('#fb7185'));
+            rulMesh.position.set(-1.08, 0.9, 0.04);
+            rulGrp.add(rulMesh);
+            rulGrp.userData.anchorLocal.set(-1.15, 0.98, 0.25);
+            tagChildrenForPicking(rulGrp, 'rul');
+
+            // 5. RML (Lobus Medius Kanan)
+            const rmlGrp = registerOrganGroup('rml');
+            const rmlGeo = buildDeformedLobeGeometry(v => {
+                v.x *= 0.84; v.y *= 0.52; v.z *= 0.72;
+                if (v.y > 0.25) v.y = 0.25 + (v.y - 0.25) * 0.25;
+                if (v.x > 0.12) v.x = 0.12 + (v.x - 0.12) * 0.2;
+                if (v.z < 0) v.y += (-v.z) * 0.35;
+            });
+            const rmlMesh = new THREE.Mesh(rmlGeo, createParenchymaMat('#f43f5e'));
+            rmlMesh.position.set(-1.12, 0.04, 0.36);
+            rmlGrp.add(rmlMesh);
+            rmlGrp.userData.anchorLocal.set(-1.2, 0.04, 0.68);
+            tagChildrenForPicking(rmlGrp, 'rml');
+
+            // 6. RIL (Lobus Inferior Kanan)
+            const rilGrp = registerOrganGroup('ril');
+            const rilGeo = buildDeformedLobeGeometry(v => {
+                v.x *= 0.94; v.y *= 1.02; v.z *= 0.92;
+                if (v.x > 0.18) v.x = 0.18 + (v.x - 0.18) * 0.2;
+                if (v.y < -0.45) {
+                    const distFromEdge = Math.max(0, 0.8 - Math.hypot(v.x, v.z));
+                    v.y = -0.58 + distFromEdge * 0.28;
+                }
+            });
+            const rilMesh = new THREE.Mesh(rilGeo, createParenchymaMat('#e11d48'));
+            rilMesh.position.set(-1.12, -0.62, -0.14);
+            rilGrp.add(rilMesh);
+            rilGrp.userData.anchorLocal.set(-1.28, -0.72, -0.1);
+            tagChildrenForPicking(rilGrp, 'ril');
+
+            // 7. LUL (Lobus Superior Kiri & Lingula)
+            const lulGrp = registerOrganGroup('lul');
+            const lulGeo = buildDeformedLobeGeometry(v => {
+                v.x *= 0.84; v.y *= 1.12; v.z *= 0.88;
+                if (v.y > 0.1) { const taper = Math.max(0.28, 1 - (v.y - 0.1) * 0.5); v.x *= taper; v.z *= taper; }
+                if (v.x < -0.15) v.x = -0.15 + (v.x + 0.15) * 0.25;
+                if (v.x < 0.25 && v.y < 0.1 && v.z > -0.1) {
+                    const notchDepth = Math.max(0, (0.25 - v.x) * (0.15 - v.y));
+                    v.x += notchDepth * 1.15;
+                }
+            });
+            const lulMesh = new THREE.Mesh(lulGeo, createParenchymaMat('#fb7185'));
+            lulMesh.position.set(1.08, 0.6, 0.16);
+            lulGrp.add(lulMesh);
+            lulGrp.userData.anchorLocal.set(1.18, 0.72, 0.35);
+            tagChildrenForPicking(lulGrp, 'lul');
+
+            // 8. LIL (Lobus Inferior Kiri)
+            const lilGrp = registerOrganGroup('lil');
+            const lilGeo = buildDeformedLobeGeometry(v => {
+                v.x *= 0.90; v.y *= 1.05; v.z *= 0.92;
+                if (v.x < -0.18) v.x = -0.18 + (v.x + 0.18) * 0.22;
+                if (v.y < -0.45) {
+                    const distFromEdge = Math.max(0, 0.8 - Math.hypot(v.x, v.z));
+                    v.y = -0.58 + distFromEdge * 0.26;
+                }
+            });
+            const lilMesh = new THREE.Mesh(lilGeo, createParenchymaMat('#e11d48'));
+            lilMesh.position.set(1.1, -0.62, -0.14);
+            lilGrp.add(lilMesh);
+            lilGrp.userData.anchorLocal.set(1.25, -0.72, -0.1);
+            tagChildrenForPicking(lilGrp, 'lil');
+
+            // 9. VASA PULMONALIS
+            const vesselsGrp = registerOrganGroup('vessels');
+            const arteryMat = new THREE.MeshPhysicalMaterial({ color: 0x3b82f6, roughness: 0.3, clearcoat: 0.5 });
+            const veinMat = new THREE.MeshPhysicalMaterial({ color: 0xef4444, roughness: 0.3, clearcoat: 0.5 });
+
+            const trunkCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0.15, -0.15, 0.25), new THREE.Vector3(0.0, 0.32, 0.12), new THREE.Vector3(-0.85, 0.38, 0.05)]);
+            const leftArtCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(0.0, 0.32, 0.12), new THREE.Vector3(0.45, 0.42, 0.08), new THREE.Vector3(0.92, 0.35, 0.02)]);
+            vesselsGrp.add(new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 24, 0.11, 14, false), arteryMat));
+            vesselsGrp.add(new THREE.Mesh(new THREE.TubeGeometry(leftArtCurve, 20, 0.10, 14, false), arteryMat));
+
+            const veinPaths = [
+                [new THREE.Vector3(-0.95, 0.48, 0.18), new THREE.Vector3(-0.4, 0.15, 0.15), new THREE.Vector3(0, -0.05, 0.1)],
+                [new THREE.Vector3(-0.92, -0.25, 0.12), new THREE.Vector3(-0.4, -0.18, 0.12), new THREE.Vector3(0, -0.12, 0.1)],
+                [new THREE.Vector3(0.95, 0.45, 0.18), new THREE.Vector3(0.4, 0.12, 0.15), new THREE.Vector3(0, -0.05, 0.1)],
+                [new THREE.Vector3(0.92, -0.25, 0.12), new THREE.Vector3(0.4, -0.18, 0.12), new THREE.Vector3(0, -0.12, 0.1)]
+            ];
+            veinPaths.forEach(pts => {
+                const c = new THREE.CatmullRomCurve3(pts);
+                vesselsGrp.add(new THREE.Mesh(new THREE.TubeGeometry(c, 16, 0.068, 12, false), veinMat));
+            });
+
+            vesselsGrp.userData.anchorLocal.set(0, 0.15, 0.25);
+            tagChildrenForPicking(vesselsGrp, 'vessels');
+
+            // 10. ALVEOLI CLUSTER
+            const alveoliGrp = registerOrganGroup('alveoli');
+            const sacMat = new THREE.MeshPhysicalMaterial({ color: 0xf9a8d4, roughness: 0.25, clearcoat: 0.7, transmission: 0.2 });
+
+            function createAlveolarCluster(center) {
+                const subGrp = new THREE.Group();
+                subGrp.position.copy(center);
+                const offsets = [
+                    [0, 0, 0, 0.13], [0.11, 0.08, 0.05, 0.10], [-0.11, 0.07, 0.06, 0.10],
+                    [0.06, -0.10, 0.08, 0.11], [-0.08, -0.09, -0.05, 0.10], [0, 0.12, -0.08, 0.09],
+                    [0.12, -0.02, -0.07, 0.09], [-0.05, 0.02, 0.12, 0.09]
+                ];
+                offsets.forEach(([ox, oy, oz, rad]) => {
+                    const s = new THREE.Mesh(new THREE.SphereGeometry(rad, 16, 16), sacMat);
+                    s.position.set(ox, oy, oz);
+                    subGrp.add(s);
+                });
+                const capRing = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.16, 0.018, 8, 24),
+                    new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.3 })
+                );
+                subGrp.add(capRing);
+                alveoliGrp.add(subGrp);
+            }
+
+            createAlveolarCluster(new THREE.Vector3(0.88, 0.12, 0.28));
+            createAlveolarCluster(new THREE.Vector3(1.02, -0.28, 0.22));
+            createAlveolarCluster(new THREE.Vector3(-0.88, 0.25, 0.25));
+            alveoliGrp.userData.anchorLocal.set(0.95, 0.0, 0.3);
+            tagChildrenForPicking(alveoliGrp, 'alveoli');
+
+            // 11. DIAFRAGMA & PLEURA
+            const diaphragmGrp = registerOrganGroup('diaphragm');
+            const muscleMat = new THREE.MeshPhysicalMaterial({ color: 0xea580c, roughness: 0.48, clearcoat: 0.25, side: THREE.DoubleSide });
+            const tendonMat = new THREE.MeshPhysicalMaterial({ color: 0xfde68a, roughness: 0.4, side: THREE.DoubleSide });
+
+            const diaphGeo = new THREE.CylinderGeometry(1.95, 2.25, 0.55, 48, 12, true);
+            const dPos = diaphGeo.attributes.position;
+            const dv = new THREE.Vector3();
+            for (let i = 0; i < dPos.count; i++) {
+                dv.fromBufferAttribute(dPos, i);
+                dv.z *= 0.65;
+                const domeCurve = Math.cos((dv.x / 2.2) * Math.PI * 0.5) * 0.42;
+                const rightLift = dv.x < 0 ? 0.12 : 0.0;
+                dv.y += domeCurve + rightLift;
+                dPos.setXYZ(i, dv.x, dv.y, dv.z);
+            }
+            diaphGeo.computeVertexNormals();
+            const diaphMesh = new THREE.Mesh(diaphGeo, muscleMat);
+            diaphMesh.position.set(0, -1.52, -0.05);
+            diaphragmGrp.add(diaphMesh);
+
+            const capGeo = new THREE.SphereGeometry(1.85, 36, 18, 0, Math.PI * 2, 0, Math.PI * 0.35);
+            capGeo.scale(1.05, 0.48, 0.65);
+            const capMesh = new THREE.Mesh(capGeo, tendonMat);
+            capMesh.position.set(0, -1.48, -0.05);
+            diaphragmGrp.add(capMesh);
+
+            const pleuraMat = new THREE.MeshPhysicalMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0.12,
+                roughness: 0.15,
+                depthWrite: false
+            });
+            const rPleura = new THREE.Mesh(new THREE.SphereGeometry(1.24, 24, 24), pleuraMat);
+            rPleura.scale.set(0.88, 1.38, 0.85);
+            rPleura.position.set(-1.12, 0.0, -0.02);
+            diaphragmGrp.add(rPleura);
+
+            const lPleura = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 24), pleuraMat);
+            lPleura.scale.set(0.86, 1.36, 0.85);
+            lPleura.position.set(1.12, 0.0, -0.02);
+            diaphragmGrp.add(lPleura);
+
+            const ribMat = new THREE.MeshPhysicalMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.15, roughness: 0.3 });
+            for (let r = 0; r < 6; r++) {
+                const yLevel = 1.05 - r * 0.38;
+                const radiusX = 1.65 + Math.sin((r / 5) * Math.PI) * 0.35;
+                const rRib = new THREE.Mesh(new THREE.TorusGeometry(radiusX * 0.62, 0.025, 8, 28, Math.PI * 0.85), ribMat);
+                rRib.rotation.x = Math.PI / 2 + 0.18; rRib.rotation.z = 0.25;
+                rRib.position.set(-0.62, yLevel, -0.05);
+                diaphragmGrp.add(rRib);
+
+                const lRib = new THREE.Mesh(new THREE.TorusGeometry(radiusX * 0.62, 0.025, 8, 28, Math.PI * 0.85), ribMat);
+                lRib.rotation.x = Math.PI / 2 + 0.18; lRib.rotation.z = Math.PI - 0.25;
+                lRib.position.set(0.62, yLevel, -0.05);
+                diaphragmGrp.add(lRib);
+            }
+
+            diaphragmGrp.userData.anchorLocal.set(0, -1.3, 0.55);
+            tagChildrenForPicking(diaphragmGrp, 'diaphragm');
+        }
+
+        buildAnatomicalModel();
+
+        // ============================================================================
+        // 5. UI LIST & 3D PINS BUILDER
+        // ============================================================================
+        const organListEl = document.getElementById('organ-list');
+
+        ORGAN_DATA.forEach((organ, idx) => {
+            const btn = document.createElement('button');
+            btn.id = `list-item-${organ.id}`;
+            btn.className = 'w-full text-left px-3 py-2 rounded-xl flex items-center justify-between gap-2 text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white transition border border-transparent';
+            btn.innerHTML = `
+                <div class="flex items-center gap-2.5 truncate">
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color:${organ.color}"></span>
+                    <span class="truncate">${idx + 1}. ${organ.name}</span>
+                </div>
+                <span class="text-[10px] text-slate-500 shrink-0">T${organ.stage}</span>
+            `;
+            btn.addEventListener('click', () => selectOrgan(organ.id, true));
+            organListEl.appendChild(btn);
+
+            const pin = document.createElement('button');
+            pin.className = 'organ-pin glass-panel px-2.5 py-1 rounded-full flex items-center gap-1.5 text-[11px] font-semibold text-slate-100 shadow-xl hover:scale-105';
+            pin.innerHTML = `
+                <span class="w-2 h-2 rounded-full shrink-0" style="background-color:${organ.color}"></span>
+                <span class="whitespace-nowrap">${organ.name}</span>
+            `;
+            pin.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectOrgan(organ.id, false);
+            });
+            labelsContainer.appendChild(pin);
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('stroke', organ.color);
+            line.setAttribute('stroke-width', '1.5');
+            line.setAttribute('stroke-dasharray', '3 3');
+            line.setAttribute('opacity', '0.65');
+            svgLines.appendChild(line);
+
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('r', '3.5');
+            dot.setAttribute('fill', organ.color);
+            svgLines.appendChild(dot);
+
+            labelElements[organ.id] = { pin, line, dot, data: organ };
+        });
+
+        // ============================================================================
+        // 6. INTERACTION & STATE
+        // ============================================================================
+        let targetExplode = 0;
+        let currentExplode = 0;
+        let targetRotY = -0.15;
+        let targetRotX = 0.08;
+        let currentRotY = -0.15;
+        let currentRotX = 0.08;
+
+        let selectedOrganId = null;
+        let isolatedMode = false;
+        let isBreathing = true;
+        let showLabels = true;
+        let breatheClock = 0;
+
+        let quizActive = false;
+        let quizTargetOrgan = null;
+        let quizScore = 0;
+        let quizCount = 0;
+
+        const explodeSlider = document.getElementById('explode-slider');
+        const explodeValueBadge = document.getElementById('explode-value-badge');
+        const explodePercentSide = document.getElementById('explode-percent-side');
+        const explodeBarSide = document.getElementById('explode-bar-side');
+        const stageDescription = document.getElementById('stage-description');
+        const stageBadge = document.getElementById('stage-badge');
+
+        function getOrganExplodeFactor(stage, globalT) {
+            if (stage === 1) return THREE.MathUtils.smoothstep(globalT, 0.0, 0.55);
+            else if (stage === 2) return THREE.MathUtils.smoothstep(globalT, 0.12, 0.82);
+            else return THREE.MathUtils.smoothstep(globalT, 0.38, 1.0);
+        }
+
+        function setExplodeProgress(val0to1) {
+            targetExplode = Math.max(0, Math.min(1, val0to1));
+            const pct = Math.round(targetExplode * 100);
+            explodeSlider.value = (targetExplode * 100).toFixed(1);
+            explodeValueBadge.textContent = `${pct}%`;
+            explodePercentSide.textContent = `${pct}%`;
+            explodeBarSide.style.width = `${pct}%`;
+
+            if (pct === 0) {
+                stageDescription.textContent = 'Tahap 0: Anatomi Utuh';
+                stageBadge.textContent = 'Utuh';
+            } else if (pct < 38) {
+                stageDescription.textContent = 'Tahap 1: Pleura, Laring & Diafragma';
+                stageBadge.textContent = 'Tahap 1';
+            } else if (pct < 72) {
+                stageDescription.textContent = 'Tahap 2: Pemisahan 5 Lobus Paru';
+                stageBadge.textContent = 'Tahap 2';
+            } else {
+                stageDescription.textContent = 'Tahap 3: Pohon Bronkial & Alveoli';
+                stageBadge.textContent = 'Terpisah Penuh';
+            }
+        }
+
+        function selectOrgan(organId, autoEnsureVisible = false) {
+            if (quizActive && organId) {
+                handleQuizAnswer(organId);
+                return;
+            }
+
+            selectedOrganId = organId;
+            const organ = ORGAN_DATA.find(o => o.id === organId);
+
+            ORGAN_DATA.forEach(o => {
+                const itemEl = document.getElementById(`list-item-${o.id}`);
+                const pinEl = labelElements[o.id].pin;
+                if (o.id === organId) {
+                    itemEl.classList.add('bg-sky-500/20', 'text-sky-300', 'border-sky-500/40');
+                    pinEl.classList.add('active-pin');
+                } else {
+                    itemEl.classList.remove('bg-sky-500/20', 'text-sky-300', 'border-sky-500/40');
+                    pinEl.classList.remove('active-pin');
+                }
+            });
+
+            if (!organ) return;
+
+            if (autoEnsureVisible && organ.stage === 3 && targetExplode < 0.65) {
+                setExplodeProgress(0.75);
+            } else if (autoEnsureVisible && organ.stage === 2 && targetExplode < 0.25) {
+                setExplodeProgress(0.40);
+            }
+
+            document.getElementById('detail-category').textContent = organ.category;
+            document.getElementById('detail-latin').textContent = organ.latin;
+            document.getElementById('detail-title').textContent = organ.name;
+            document.getElementById('detail-desc').textContent = organ.desc;
+            document.getElementById('detail-function').textContent = organ.func;
+            document.getElementById('detail-clinical').textContent = organ.clinical;
+
+            const specsGrid = document.getElementById('detail-specs');
+            specsGrid.innerHTML = organ.specs.map(s => `
+                <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                    <span class="text-[10px] text-slate-400 block">${s.label}</span>
+                    <span class="text-xs font-bold text-white">${s.val}</span>
+                </div>
+            `).join('');
+
+            applyVisualHighlight();
+        }
+
+        function applyVisualHighlight() {
+            Object.keys(organGroups).forEach(id => {
+                const grp = organGroups[id];
+                const isSelected = id === selectedOrganId;
+                const isLobe = ['rul', 'rml', 'ril', 'lul', 'lil'].includes(id);
+
+                grp.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        if (child.userData.origOpacity === undefined) {
+                            child.userData.origOpacity = child.material.opacity !== undefined ? child.material.opacity : 1;
+                        }
+                        const baseOp = (xrayMode && isLobe) ? 0.22 : child.userData.origOpacity;
+
+                        if (!selectedOrganId) {
+                            child.material.emissive = new THREE.Color(0x000000);
+                            child.material.opacity = baseOp;
+                            child.material.transparent = baseOp < 1;
+                        } else if (isSelected) {
+                            child.material.emissive = new THREE.Color(0x0ea5e9);
+                            child.material.emissiveIntensity = 0.45;
+                            child.material.opacity = 1.0;
+                        } else {
+                            child.material.emissive = new THREE.Color(0x000000);
+                            child.material.opacity = isolatedMode ? 0.08 : baseOp * 0.4;
+                            child.material.transparent = true;
+                        }
+                    }
+                });
+            });
+        }
+
+        // ============================================================================
+        // 7. EVENT LISTENERS
+        // ============================================================================
+        let isDragging = false;
+        let dragMoved = false;
+        let prevMouse = { x: 0, y: 0 };
+        let initialPinchDist = null;
+        let initialPinchExplode = 0;
+
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragMoved = false;
+            prevMouse = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - prevMouse.x;
+            const dy = e.clientY - prevMouse.y;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+
+            targetRotY += dx * 0.007;
+            targetRotX = Math.max(-0.85, Math.min(0.85, targetRotX + dy * 0.006));
+            prevMouse = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY * 0.00085;
+            setExplodeProgress(targetExplode + delta);
+        }, { passive: false });
+
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                dragMoved = false;
+                prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2) {
+                isDragging = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                initialPinchDist = Math.hypot(dx, dy);
+                initialPinchExplode = targetExplode;
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && isDragging) {
+                const dx = e.touches[0].clientX - prevMouse.x;
+                const dy = e.touches[0].clientY - prevMouse.y;
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+                targetRotY += dx * 0.007;
+                targetRotX = Math.max(-0.85, Math.min(0.85, targetRotX + dy * 0.006));
+                prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2 && initialPinchDist) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                const diff = (dist - initialPinchDist) / 220;
+                setExplodeProgress(initialPinchExplode + diff);
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchend', () => { isDragging = false; initialPinchDist = null; });
+
+        const raycaster = new THREE.Raycaster();
+        const mouseNDC = new THREE.Vector2();
+
+        container.addEventListener('click', (e) => {
+            if (dragMoved) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouseNDC, camera);
+            const hits = raycaster.intersectObjects(pickableMeshes, false);
+            if (hits.length > 0) {
+                const hitOrganId = hits[0].object.userData.organId;
+                if (hitOrganId) selectOrgan(hitOrganId, false);
+            } else {
+                selectedOrganId = null;
+                isolatedMode = false;
+                selectOrgan(null);
+            }
+        });
+
+        explodeSlider.addEventListener('input', (e) => {
+            setExplodeProgress(parseFloat(e.target.value) / 100);
+        });
+
+        document.getElementById('btn-assemble').addEventListener('click', () => setExplodeProgress(0));
+        document.getElementById('btn-full-explode').addEventListener('click', () => setExplodeProgress(1));
+
+        document.querySelectorAll('.preset-step').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = parseFloat(btn.getAttribute('data-preset')) / 100;
+                setExplodeProgress(val);
+            });
+        });
+
+        let breatheSpeedMode = 1;
+        document.getElementById('btn-breathe').addEventListener('click', () => {
+            breatheSpeedMode = (breatheSpeedMode + 1) % 3;
+            isBreathing = breatheSpeedMode !== 0;
+            const statusEl = document.getElementById('breathe-status');
+            if (breatheSpeedMode === 1) statusEl.textContent = 'Normal (16/m)';
+            else if (breatheSpeedMode === 2) statusEl.textContent = 'Cepat (28/m)';
+            else statusEl.textContent = 'Dijeda';
+        });
+
+        const btnXray = document.getElementById('btn-xray');
+        btnXray.addEventListener('click', () => {
+            xrayMode = !xrayMode;
+            btnXray.classList.toggle('bg-cyan-500/25', xrayMode);
+            btnXray.classList.toggle('border-cyan-400', xrayMode);
+            applyVisualHighlight();
+        });
+
+        const btnAirflow = document.getElementById('btn-airflow');
+        btnAirflow.addEventListener('click', () => {
+            showAirflow = !showAirflow;
+            airflowGroup.visible = showAirflow;
+            btnAirflow.classList.toggle('opacity-50', !showAirflow);
+        });
+
+        const camPresets = {
+            anterior: { rx: 0.06, ry: 0.0 },
+            right: { rx: 0.05, ry: Math.PI * 0.48 },
+            left: { rx: 0.05, ry: -Math.PI * 0.48 },
+            posterior: { rx: 0.06, ry: Math.PI },
+            superior: { rx: 0.82, ry: 0.0 }
+        };
+        document.querySelectorAll('.cam-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.getAttribute('data-cam');
+                if (camPresets[key]) {
+                    targetRotX = camPresets[key].rx;
+                    targetRotY = camPresets[key].ry;
+                }
+                document.querySelectorAll('.cam-preset').forEach(b => {
+                    b.classList.remove('bg-sky-500/20', 'text-sky-300', 'font-semibold');
+                });
+                btn.classList.add('bg-sky-500/20', 'text-sky-300', 'font-semibold');
+            });
+        });
+
+        const searchInput = document.getElementById('organ-search');
+        searchInput.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            ORGAN_DATA.forEach(o => {
+                const btn = document.getElementById(`list-item-${o.id}`);
+                const match = o.name.toLowerCase().includes(q) || o.latin.toLowerCase().includes(q) || o.category.toLowerCase().includes(q);
+                btn.style.display = match ? 'flex' : 'none';
+            });
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            setExplodeProgress(0);
+            targetRotX = 0.08; targetRotY = -0.15;
+            selectedOrganId = null; isolatedMode = false; xrayMode = false;
+            btnXray.classList.remove('bg-cyan-500/25', 'border-cyan-400');
+            selectOrgan(null);
+        });
+
+        document.getElementById('btn-prev-organ').addEventListener('click', () => {
+            const idx = ORGAN_DATA.findIndex(o => o.id === selectedOrganId);
+            const prevIdx = idx <= 0 ? ORGAN_DATA.length - 1 : idx - 1;
+            selectOrgan(ORGAN_DATA[prevIdx].id, true);
+        });
+
+        document.getElementById('btn-next-organ').addEventListener('click', () => {
+            const idx = ORGAN_DATA.findIndex(o => o.id === selectedOrganId);
+            const nextIdx = idx >= ORGAN_DATA.length - 1 ? 0 : idx + 1;
+            selectOrgan(ORGAN_DATA[nextIdx].id, true);
+        });
+
+        document.getElementById('btn-isolate-organ').addEventListener('click', () => {
+            if (!selectedOrganId) selectOrgan('rul', true);
+            isolatedMode = !isolatedMode;
+            applyVisualHighlight();
+        });
+
+        const detailPanel = document.getElementById('detail-panel');
+        const btnOpenMobile = document.getElementById('btn-open-detail-mobile');
+        document.getElementById('btn-close-detail').addEventListener('click', () => {
+            detailPanel.classList.add('translate-x-[110%]');
+            btnOpenMobile.classList.remove('hidden'); btnOpenMobile.classList.add('flex');
+        });
+        btnOpenMobile.addEventListener('click', () => {
+            detailPanel.classList.remove('translate-x-[110%]');
+            btnOpenMobile.classList.add('hidden'); btnOpenMobile.classList.remove('flex');
+        });
+
+        // Modals
+        const alveoliModal = document.getElementById('alveoli-modal');
+        document.getElementById('btn-alveoli-modal').addEventListener('click', () => { alveoliModal.classList.remove('hidden'); alveoliModal.classList.add('flex'); });
+        document.getElementById('btn-close-alveoli').addEventListener('click', () => { alveoliModal.classList.add('hidden'); alveoliModal.classList.remove('flex'); });
+
+        const spirometryModal = document.getElementById('spirometry-modal');
+        document.getElementById('btn-spirometry').addEventListener('click', () => { spirometryModal.classList.remove('hidden'); spirometryModal.classList.add('flex'); });
+        document.getElementById('btn-close-spirometry').addEventListener('click', () => { spirometryModal.classList.add('hidden'); spirometryModal.classList.remove('flex'); });
+
+        // Quiz
+        const quizBanner = document.getElementById('quiz-banner');
+        const quizQuestion = document.getElementById('quiz-question');
+        const quizFeedback = document.getElementById('quiz-feedback');
+        const quizScoreEl = document.getElementById('quiz-score');
+
+        function nextQuizQuestion() {
+            const randomOrgan = ORGAN_DATA[Math.floor(Math.random() * ORGAN_DATA.length)];
+            quizTargetOrgan = randomOrgan;
+            quizQuestion.innerHTML = `Klik pada struktur: <span class="text-amber-300 underline">${randomOrgan.name}</span> <span class="text-slate-400 font-normal">(${randomOrgan.latin})</span>`;
+        }
+
+        function handleQuizAnswer(clickedId) {
+            quizCount++;
+            quizFeedback.classList.remove('hidden');
+            if (clickedId === quizTargetOrgan.id) {
+                quizScore++;
+                quizFeedback.className = 'text-[11px] text-emerald-400 font-semibold mt-1';
+                quizFeedback.textContent = `Benar! Itu adalah ${quizTargetOrgan.name}.`;
+                setTimeout(() => nextQuizQuestion(), 1100);
+            } else {
+                const wrongOrgan = ORGAN_DATA.find(o => o.id === clickedId);
+                quizFeedback.className = 'text-[11px] text-rose-400 font-semibold mt-1';
+                quizFeedback.textContent = `Kurang tepat. Bagian yang Anda klik adalah ${wrongOrgan ? wrongOrgan.name : ''}.`;
+            }
+            quizScoreEl.textContent = `Skor: ${quizScore}/${quizCount}`;
+        }
+
+        document.getElementById('btn-quiz').addEventListener('click', () => {
+            quizActive = !quizActive;
+            if (quizActive) {
+                quizScore = 0; quizCount = 0;
+                quizScoreEl.textContent = 'Skor: 0/0';
+                quizBanner.classList.remove('hidden');
+                if (targetExplode < 0.6) setExplodeProgress(0.75);
+                nextQuizQuestion();
+            } else {
+                quizBanner.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('btn-close-quiz').addEventListener('click', () => {
+            quizActive = false;
+            quizBanner.classList.add('hidden');
+        });
+
+        // ============================================================================
+        // 8. ANIMATION LOOP
+        // ============================================================================
+        const tempAnchorWorld = new THREE.Vector3();
+        const tempPinWorld = new THREE.Vector3();
+
+        function updateLabelsAndLines() {
+            if (!showLabels) return;
+            const halfW = window.innerWidth / 2;
+            const halfH = window.innerHeight / 2;
+
+            ORGAN_DATA.forEach(organ => {
+                const grp = organGroups[organ.id];
+                const ui = labelElements[organ.id];
+
+                const isVisible = organ.stage <= 2 || currentExplode > 0.28 || selectedOrganId === organ.id;
+
+                if (!isVisible) {
+                    ui.pin.style.opacity = '0';
+                    ui.pin.style.pointerEvents = 'none';
+                    ui.line.setAttribute('opacity', '0');
+                    ui.dot.setAttribute('opacity', '0');
+                    return;
+                }
+
+                tempAnchorWorld.copy(grp.userData.anchorLocal);
+                grp.localToWorld(tempAnchorWorld);
+
+                const stageFactor = getOrganExplodeFactor(organ.stage, currentExplode);
+                tempPinWorld.copy(tempAnchorWorld).add(
+                    new THREE.Vector3(
+                        organ.labelOffset.x * (0.45 + stageFactor * 0.75),
+                        organ.labelOffset.y * (0.45 + stageFactor * 0.75),
+                        organ.labelOffset.z
+                    )
+                );
+
+                tempAnchorWorld.project(camera);
+                tempPinWorld.project(camera);
+
+                const ax = (tempAnchorWorld.x * halfW) + halfW;
+                const ay = -(tempAnchorWorld.y * halfH) + halfH;
+                const px = (tempPinWorld.x * halfW) + halfW;
+                const py = -(tempPinWorld.y * halfH) + halfH;
+
+                ui.pin.style.left = `${px}px`;
+                ui.pin.style.top = `${py}px`;
+                ui.pin.style.opacity = selectedOrganId && selectedOrganId !== organ.id ? '0.45' : '0.95';
+                ui.pin.style.pointerEvents = 'auto';
+
+                ui.line.setAttribute('x1', ax);
+                ui.line.setAttribute('y1', ay);
+                ui.line.setAttribute('x2', px);
+                ui.line.setAttribute('y2', py);
+                ui.line.setAttribute('opacity', selectedOrganId === organ.id ? '1' : '0.55');
+
+                ui.dot.setAttribute('cx', ax);
+                ui.dot.setAttribute('cy', ay);
+                ui.dot.setAttribute('opacity', '0.9');
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            currentExplode += (targetExplode - currentExplode) * 0.09;
+            currentRotX += (targetRotX - currentRotX) * 0.1;
+            currentRotY += (targetRotY - currentRotY) * 0.1;
+
+            rootGroup.rotation.x = currentRotX;
+            rootGroup.rotation.y = currentRotY;
+
+            const targetCamZ = 10.0 + currentExplode * 3.8;
+            camera.position.z += (targetCamZ - camera.position.z) * 0.08;
+
+            if (isBreathing) {
+                const speedMult = breatheSpeedMode === 2 ? 0.065 : 0.032;
+                breatheClock += speedMult;
+                const sinVal = Math.sin(breatheClock);
+                const cosVal = Math.cos(breatheClock);
+                const breathWave = (sinVal + 1) * 0.5;
+                const amp = breatheSpeedMode === 2 ? 1.45 : 1.0;
+
+                const sx = 1 + breathWave * 0.04 * amp;
+                const sy = 1 + breathWave * 0.026 * amp;
+                const sz = 1 + breathWave * 0.042 * amp;
+                breathingGroup.scale.set(sx, sy, sz);
+
+                const phaseEl = document.getElementById('breath-phase-label');
+                if (phaseEl) {
+                    if (cosVal >= 0) {
+                        phaseEl.textContent = 'Inspirasi (Masuk)';
+                        phaseEl.className = 'text-[10px] font-bold text-sky-400';
+                    } else {
+                        phaseEl.textContent = 'Ekspirasi (Keluar)';
+                        phaseEl.className = 'text-[10px] font-bold text-purple-400';
+                    }
+                }
+            }
+
+            if (showAirflow) {
+                airflowParticles.forEach(p => {
+                    p.t += p.speed * (breatheSpeedMode === 2 ? 1.6 : 1);
+                    if (p.t > 1) p.t -= 1;
+                    const progress = p.isO2 ? p.t : (1 - p.t);
+                    p.curve.getPoint(progress, p.mesh.position);
+                });
+            }
+
+            Object.keys(organGroups).forEach(id => {
+                const grp = organGroups[id];
+                const factor = getOrganExplodeFactor(grp.userData.stage, currentExplode);
+                grp.position.lerpVectors(grp.userData.basePos, grp.userData.explodeVec, factor);
+
+                if (['rul', 'rml', 'ril', 'lul', 'lil'].includes(id) && !selectedOrganId) {
+                    grp.traverse(child => {
+                        if (child.isMesh && child.material) {
+                            child.material.opacity = xrayMode ? 0.22 : (0.95 - currentExplode * 0.15);
+                            child.material.transparent = true;
+                        }
+                    });
+                }
+            });
+
+            renderer.render(scene, camera);
+            updateLabelsAndLines();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = function () {
+            lucide.createIcons();
+            animate();
+        };
+    </script>
+</body>
+</html>
